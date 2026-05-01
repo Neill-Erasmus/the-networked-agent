@@ -5,7 +5,23 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com)
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-FF6B6B?style=flat-square)](https://ollama.ai)
 
-A sophisticated AI reasoning framework that combines **Graph of Thought (GoT)** decomposition with **GraphRAG** retrieval to enable powerful multi-step problem-solving with local LLMs.
+A local AI reasoning framework that combines **Graph of Thought (GoT)** decomposition with **GraphRAG** retrieval to support multi-step problem solving with Ollama.
+
+## Table of Contents
+
+- [Summary](#summary)
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [How to Use: Detailed Workflows](#how-to-use-detailed-workflows)
+- [Understanding the Output](#understanding-the-output)
+- [Advanced Topics](#advanced-topics)
+- [Troubleshooting](#troubleshooting)
+- [Performance Characteristics](#performance-characteristics)
+- [License](#license)
+- [Citation](#citation)
 
 ---
 
@@ -13,45 +29,44 @@ A sophisticated AI reasoning framework that combines **Graph of Thought (GoT)** 
 
 ### What Problem Does This Solve?
 
-Most LLM applications struggle with complex reasoning tasks because they attempt to solve everything in a single forward pass. The Networked Agent addresses this by separating **knowledge retrieval** from **reasoning**, allowing an AI system to:
+Most LLM applications struggle with complex reasoning tasks because they attempt to solve everything in a single forward pass. The Networked Agent separates **knowledge retrieval** from **reasoning**, allowing the system to:
 
 1. **Break down complex problems** into manageable subproblems
-2. **Retrieve relevant context** from a knowledge base at each reasoning step
+2. **Retrieve relevant context** from a knowledge base before and during reasoning
 3. **Explore multiple reasoning paths** and score them for quality
-4. **Synthesize final answers** with full transparency into the reasoning process
+4. **Synthesize final answers** while preserving the reasoning trace
 
 ### Graph of Thought (GoT): Structured Reasoning
 
-**Graph of Thought** is a reasoning framework that treats problem-solving as graph exploration rather than linear token generation:
+**Graph of Thought** treats problem solving as graph exploration rather than linear token generation:
 
-- **Decomposition**: Complex tasks are broken into a hierarchy of subproblems
+- **Decomposition**: Tasks are split into subproblems with JSON-based prompts
 - **Expansion**: Each thought node is expanded into multiple candidate branches
-- **Scoring**: Candidate thoughts are evaluated for quality and relevance
-- **Beam Search**: Only the most promising paths are explored (configurable beam width)
+- **Scoring**: Candidate thoughts are evaluated with a hybrid heuristic and LLM score
+- **Beam Search**: Only the most promising paths are explored
 - **Synthesis**: The best reasoning path is assembled into a final answer
 
-**Real-world analogy**: Instead of a student writing an essay in one draft, GoT is like a student outlining topics, exploring multiple explanations for each point, evaluating which explanations are strongest, and then synthesizing the best path into a coherent essay.
+The implementation in this repository lives in [src/graph_of_thought/controller.py](src/graph_of_thought/controller.py), [src/graph_of_thought/search.py](src/graph_of_thought/search.py), and related helpers.
 
 ### GraphRAG: Knowledge Graph Retrieval-Augmented Generation
 
-**GraphRAG** is a retrieval system that goes beyond simple document matching:
+**GraphRAG** goes beyond simple document matching:
 
-- **Knowledge Graph Construction**: Ingested text is parsed into entities and relationships
-- **Multi-hop Retrieval**: Context is retrieved not just from direct matches, but from neighboring nodes in the knowledge graph (configurable hop distance)
+- **Knowledge Graph Construction**: Ingested text is chunked, embedded, and indexed with heuristic entity and relationship extraction
+- **Multi-hop Retrieval**: Context is retrieved not just from direct matches, but from neighboring chunks in the knowledge graph
 - **Vector Similarity**: Semantic search finds relevant chunks even with paraphrasing
-- **Evidence Citation**: Retrieved chunks are tracked and can be cited in final answers
+- **Evidence Tracking**: Retrieved chunk ids, source labels, and hop depth are preserved in the retrieval result
 
-**Real-world analogy**: Instead of a library search that finds one matching book, GraphRAG is like following citation chains—starting with relevant books and then checking what *those* books reference to build a richer context.
+The implementation in this repository lives in [src/graph_rag/engine.py](src/graph_rag/engine.py), [src/graph_rag/retriever.py](src/graph_rag/retriever.py), and [src/graph_rag/store.py](src/graph_rag/store.py).
 
 ### The Networked Agent: Integration Architecture
 
 The Networked Agent combines these two systems:
 
 - **GoT** breaks down the user's question into subproblems
-- **GraphRAG** retrieves contextual knowledge for each subproblem
-- **GoT** explores multiple reasoning paths with this dynamic context
+- **GraphRAG** retrieves contextual knowledge before reasoning and can refine context during search
 - **Episodic Memory** tracks the reasoning journey separately from the source knowledge base
-- **Visualizations** provide full transparency into what the agent found and how it reasoned
+- **Visualizations** persist HTML, JSON, and DOT artifacts for each answer turn
 
 This is particularly powerful for:
 - Complex multi-step reasoning over domain knowledge
@@ -64,26 +79,26 @@ This is particularly powerful for:
 ## Key Features
 
 ✨ **Advanced Reasoning**
-- Decomposition-based problem-solving with configurable depth and branching
+- Decomposition-based problem solving with configurable depth, beam width, branch factor, and temperature
 - Beam search exploration of promising reasoning paths
-- Scoring and ranking of candidate thoughts
+- Hybrid scoring that combines heuristics with optional LLM-based scoring
 - Episodic memory to track agent reasoning history
 
 🔗 **Knowledge Integration**
 - Multi-hop graph-based retrieval over ingested documents
-- Automatic knowledge graph construction from text
-- Vector similarity search with semantic understanding
-- Evidence citation and source tracking
+- Automatic document chunking and embedding on ingestion
+- Vector similarity search with lexical overlap as a secondary signal
+- Evidence tracking with chunk ids, sources, and hop depth
 
 📊 **Transparency & Debugging**
 - Full reasoning path visualization
 - HTML outputs showing GoT and GraphRAG artifacts
-- Graph representations (DOT format) for both systems
-- Configurable logging and inspection
+- Graph representations in JSON and DOT format for both systems
+- Configurable output directory and optional visualization disabling
 
 🏠 **Fully Local**
 - Powered by Ollama for private, on-device LLM inference
-- No API calls or external dependencies
+- No hosted API calls are required
 - Full control over models and parameters
 
 ---
@@ -143,10 +158,11 @@ This is particularly powerful for:
 ## Prerequisites
 
 - **Python 3.10+**
-- **Ollama** (running locally or remotely)
+- **Ollama** running locally or remotely
 - Ollama models installed:
-  - Chat model: `ollama pull llama3` (or your preferred model)
-  - Embedding model: `ollama pull nomic-embed-text`
+  - Chat model: `ollama pull llama3` or your preferred chat model
+  - Embedding model: `ollama pull nomic-embed-text` or your preferred embedding model
+- No Python package install step is required; this repository currently uses the Python standard library plus Ollama's HTTP API
 
 ### Installation
 
@@ -162,17 +178,12 @@ This is particularly powerful for:
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Start Ollama**
+3. **Start Ollama**
    ```bash
    ollama serve
    ```
 
-5. **Ensure models are available**
+4. **Ensure models are available**
    ```bash
    ollama pull llama3
    ollama pull nomic-embed-text
@@ -185,10 +196,9 @@ This is particularly powerful for:
 ### Basic Usage
 
 ```python
-from networked_agent import NetworkedAgent
+from src.networked_agent import NetworkedAgent
 from src.ollama_client import OllamaClient, OllamaConfig
 
-# Initialize LLM client
 llm = OllamaClient(
     OllamaConfig(
         base_url="http://localhost:11434",
@@ -197,20 +207,35 @@ llm = OllamaClient(
     )
 )
 
-# Create agent
 agent = NetworkedAgent(llm=llm)
 
-# Ingest knowledge
 doc_id = agent.ingest_text("Python is a high-level programming language...")
-agent.save()
 
-# Ask a question
-answer = agent.query("What are the benefits of Python?")
-print(answer.answer)
-print(f"Confidence: {answer.confidence}")
+turn = agent.think_and_answer("What are the benefits of Python?")
+print(turn.answer)
+print(turn.retrieved_chunk_ids)
+print(turn.reasoning_path)
+print(turn.visualization_html)
 ```
 
+If you want the latest turn stored in memory, inspect `agent.episodic_memory[-1]` after a query.
+
 ### Command Line
+
+**Root CLI**
+```bash
+python main.py --ask "What are the benefits of Python?"
+```
+
+**Ingest a text or JSON file**
+```bash
+python main.py --ingest-file path/to/document.txt
+```
+
+**Interactive mode**
+```bash
+python main.py --interactive
+```
 
 **Graph of Thought (standalone)**
 ```bash
@@ -246,14 +271,15 @@ python -m src.graph_rag.main \
 - `GRAPHRAG_STORE_PATH`: Path to knowledge graph store (default: `data/graphrag_store.json`)
 - `GRAPHRAG_TOP_K`: Number of top chunks to retrieve (default: 4)
 - `GRAPHRAG_HOPS`: Multi-hop retrieval distance (default: 1)
-- `GRAPHRAG_CHUNK_SIZE`: Document chunk size (default: 140)
-- `GRAPHRAG_CHUNK_OVERLAP`: Chunk overlap for sliding window (default: 30)
-- `GRAPHRAG_MIN_RELEVANCE_SCORE`: Minimum similarity threshold (default: 0.18)
+- `GRAPHRAG_CHUNK_SIZE`: Word count per chunk during ingestion (default: 140)
+- `GRAPHRAG_CHUNK_OVERLAP`: Word overlap between neighboring chunks (default: 30)
+- `GRAPHRAG_MIN_RELEVANCE_SCORE`: Minimum retrieval threshold for seed chunks (default: 0.18)
 
 #### Ollama
 - `OLLAMA_BASE_URL`: Ollama server URL (default: `http://localhost:11434`)
 - `OLLAMA_CHAT_MODEL`: Chat model name (default: `llama3:latest`)
-- `OLLAMA_EMBED_MODEL`: Embedding model name (default: `nomic-embed-text`)
+- `OLLAMA_EMBED_MODEL`: Embedding model name (default: `nomic-embed-text:latest`)
+- `OLLAMA_TIMEOUT_SECONDS`: Request timeout for Ollama HTTP calls in seconds (default: 600)
 
 #### Agent
 - `AGENT_SAVE_VISUALIZATIONS`: Save HTML visualizations (default: `true`)
@@ -263,7 +289,7 @@ python -m src.graph_rag.main \
 ### Configuration Objects
 
 ```python
-from networked_agent import NetworkedAgentConfig
+from src.networked_agent import NetworkedAgentConfig
 from src.graph_of_thought import GoTConfig
 from src.graph_rag import GraphRAGConfig
 
@@ -279,6 +305,7 @@ rag_config = GraphRAGConfig(
     default_top_k=6,
     default_hops=2,
     chunk_size=200,
+    chunk_overlap=40,
 )
 
 agent_config = NetworkedAgentConfig(
@@ -290,66 +317,33 @@ agent_config = NetworkedAgentConfig(
 
 ---
 
-## Project Structure
-
-```
-the-networked-agent/
-├── networked_agent.py           # Main agent orchestrator
-├── ollama_client.py             # LLM client wrapper
-├── visualization.py             # HTML visualization engine
-├── src/
-│   ├── graph_of_thought/
-│   │   ├── controller.py        # GoT orchestration
-│   │   ├── graph.py             # Thought graph data structure
-│   │   ├── parser.py            # LLM output parsing
-│   │   ├── prompter.py          # Prompt generation
-│   │   ├── scorer.py            # Thought evaluation
-│   │   ├── search.py            # Beam search algorithm
-│   │   └── main.py              # CLI entry point
-│   └── graph_rag/
-│       ├── engine.py            # RAG orchestration
-│       ├── retriever.py         # Multi-hop retrieval
-│       ├── store.py             # Knowledge graph storage
-│       └── main.py              # CLI entry point
-├── data/
-│   ├── graphrag_store.json      # Knowledge graph (generated)
-│   └── visualizations/          # Output HTML/JSON (generated)
-└── README.md                    # This file
-```
-
----
-
 ## How to Use: Detailed Workflows
 
 ### Workflow 1: Simple RAG Query
 
 ```python
-from networked_agent import NetworkedAgent
+from src.networked_agent import NetworkedAgent
 from src.ollama_client import OllamaClient, OllamaConfig
 
 llm = OllamaClient(OllamaConfig())
 agent = NetworkedAgent(llm=llm)
 
-# Ingest documents
 agent.ingest_text("The Earth orbits the Sun in approximately 365 days.")
 agent.ingest_file("path/to/document.txt")
-agent.save()
 
-# Query with retrieval
-turn = agent.query("How long does Earth take to orbit the Sun?")
+turn = agent.think_and_answer("How long does Earth take to orbit the Sun?")
 print(turn.answer)
+print(turn.retrieved_chunk_ids)
 ```
 
 ### Workflow 2: Multi-Step Reasoning with GoT
 
 ```python
-# Agent automatically uses GoT for complex queries
-turn = agent.query(
+turn = agent.think_and_answer(
     "Explain the relationship between Earth's orbit and seasons, "
     "considering axial tilt and solar radiation."
 )
 
-# Access detailed reasoning
 print(f"Reasoning path: {turn.reasoning_path}")
 print(f"Retrieved chunks: {turn.retrieved_chunk_ids}")
 print(f"Visualization: {turn.visualization_html}")
@@ -367,28 +361,25 @@ controller = GraphOfThoughtController(
     config=GoTConfig(max_depth=3, beam_width=3)
 )
 
-# Reason without retrieval (useful for logical puzzles, math, etc.)
-result = controller.reason(
+result = controller.solve(
     task="If A implies B, and B implies C, what can we conclude about A and C?",
     context=""
 )
 
 print(result.answer)
+print(result.best_thought)
 print(result.reasoning_path)
 ```
 
 ### Workflow 4: Visualization & Analysis
 
 ```python
-turn = agent.query("Complex question here...")
+turn = agent.think_and_answer("Complex question here...")
 
-# Inspect results
-print(f"Confidence score: {turn.confidence}")
 print(f"HTML visualization: {turn.visualization_html}")
 
-# Load visualization in browser
 import webbrowser
-webbrowser.open(f"file://{turn.visualization_html}")
+webbrowser.open(turn.visualization_html)
 ```
 
 ---
@@ -398,25 +389,24 @@ webbrowser.open(f"file://{turn.visualization_html}")
 ### Episodic Memory
 
 The agent maintains separate episodic memory from source knowledge:
-- **Source Knowledge**: The ingested documents in GraphRAG store
+- **Source Knowledge**: The ingested documents in the GraphRAG store
 - **Episodic Memory**: Records of past queries, reasoning paths, and answers
 - This separation prevents reasoning artifacts from contaminating factual knowledge
 
 ### Confidence Scores
 
-Each query result includes a confidence score (0.0-1.0) based on:
-- Quality of retrieved context
-- Consistency of reasoning path
-- Agreement with source evidence
+Confidence is not exposed on the public `AgentTurn` object. The agent does store a lightweight internal confidence value in episodic memory, but the public outputs are the answer, reasoning path, retrieved chunk ids, and optional visualization path.
 
 ### Visualization Files
 
-For each query, if `save_visualizations=true`:
-- `query_{timestamp}.html`: Interactive visualization
-- `query_{timestamp}_got.json`: GoT graph structure
-- `query_{timestamp}_rag.json`: RAG retrieval chains
-- `query_{timestamp}_got.dot`: GraphViz format for GoT
-- `query_{timestamp}_rag.dot`: GraphViz format for RAG
+For each query, if `AGENT_SAVE_VISUALIZATIONS=true`:
+- `visualization.html`: Interactive visualization
+- `got_graph.json`: GoT graph structure
+- `graphrag_graph.json`: GraphRAG retrieval graph and hits
+- `got_graph.dot`: GraphViz format for GoT
+- `graphrag_graph.dot`: GraphViz format for GraphRAG
+- `meta.json`: Query metadata, including models and output directory
+- Files are written into a timestamped directory under `AGENT_VISUALIZATION_DIR`
 
 ---
 
@@ -427,11 +417,9 @@ For each query, if `save_visualizations=true`:
 ```python
 def custom_retriever(task: str, context: str, depth: int) -> str:
     """Custom retrieval function called at each GoT depth."""
-    # Your custom retrieval logic here
     return new_context
 
-# Use with GoT
-controller.reason(task="...", context="...", retrieval_fn=custom_retriever)
+result = controller.solve(task="...", context="...", retrieval_fn=custom_retriever)
 ```
 
 ### Modifying Prompts
@@ -441,20 +429,18 @@ from src.graph_of_thought import GoTPrompter
 
 prompter = GoTPrompter()
 
-# Customize prompts for your domain
 custom_system = "You are an expert in software architecture."
 custom_decompose = "Break down this software design question: {task}"
 
-# Override and use
-result = controller.reason(task="...", context="...")
+result = controller.solve(task="...", context="...")
 ```
 
 ### Scaling to Larger Knowledge Bases
 
 For production use with large document collections:
 
-1. **Store splitting**: Use MongoDB or other backends instead of JSON files
-2. **Vector database**: Replace in-memory vectors with Pinecone, Weaviate, etc.
+1. **Store splitting**: Move the JSON-backed store to a database-backed implementation
+2. **Vector database**: Replace in-memory embeddings with a dedicated vector store
 3. **Caching**: Cache LLM responses and retrievals
 4. **Batching**: Process multiple queries in parallel
 
@@ -470,20 +456,26 @@ For production use with large document collections:
 ### "Model not found"
 ```bash
 ollama list                    # See available models
-ollama pull llama3            # Download model
-ollama pull nomic-embed-text  # Download embeddings
+ollama pull llama3             # Download model
+ollama pull nomic-embed-text   # Download embeddings
 ```
+
+### "Model name is empty"
+- Set `OLLAMA_CHAT_MODEL` and `OLLAMA_EMBED_MODEL` explicitly if your environment does not already provide them
+- The code validates that both models exist before starting a query
 
 ### Poor retrieval results
 - Increase `GRAPHRAG_TOP_K` to retrieve more context
 - Increase `GRAPHRAG_HOPS` for multi-hop retrieval
 - Lower `GRAPHRAG_MIN_RELEVANCE_SCORE` to include borderline matches
 - Ingest more relevant documents
+- Check that the embedding model is returning non-empty vectors
 
 ### Slow reasoning
 - Reduce `GOT_MAX_DEPTH` to search more shallowly
 - Reduce `GOT_BEAM_WIDTH` to explore fewer branches
-- Use a faster model (e.g., `mistral` instead of `llama3`)
+- Reduce `GOT_BRANCH_FACTOR` to generate fewer expansions
+- Use a faster model if your local Ollama setup supports one
 
 ---
 
@@ -491,10 +483,10 @@ ollama pull nomic-embed-text  # Download embeddings
 
 | Component | Typical Time | Factors |
 |-----------|-------------|---------|
-| Simple RAG query | 5-15s | Model speed, chunk count |
-| GoT reasoning (depth=3) | 30-90s | LLM, branching, retrieval |
-| Graph construction | 1-5s per doc | Document size, embedding model |
-| Multi-hop retrieval | 2-5x retrieval time | Hop count, graph density |
+| Simple RAG query | Depends on model latency | Model speed, chunk count, retrieval depth |
+| GoT reasoning (depth=3) | Depends on model latency | LLM speed, beam width, branch factor, retrieval refinement |
+| Graph construction | Depends on document size | Chunk count, embedding model, relationship extraction |
+| Multi-hop retrieval | Usually slower than single-hop retrieval | Hop count, graph density, selected seed chunks |
 
 ---
 
