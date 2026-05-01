@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Erasmus"
+  given-names: "Neill Jean"
+title: "The Networked Agent"
+version: 1.0.0
+date-released: 2026-05-01
+url: "https://github.com/Neill-Erasmus/the-networked-agent"
