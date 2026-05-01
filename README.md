@@ -21,7 +21,6 @@ A local AI reasoning framework that combines **Graph of Thought (GoT)** decompos
 - [Troubleshooting](#troubleshooting)
 - [Performance Characteristics](#performance-characteristics)
 - [License](#license)
-- [Citation](#citation)
 
 ---
 
