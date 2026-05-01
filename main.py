@@ -6,8 +6,14 @@ import os
 from src.networked_agent import NetworkedAgent, NetworkedAgentConfig
 from src.ollama_client import OllamaClient, OllamaConfig, OllamaError
 
-
 def build_parser() -> argparse.ArgumentParser:
+	"""
+	Builds the argument parser for the networked agent.
+
+	Returns:
+		argparse.ArgumentParser: The configured argument parser.
+	"""    
+    
 	parser = argparse.ArgumentParser(description="Networked Agent powered by GoT + GraphRAG on local Ollama.")
 	parser.add_argument("--base-url", type=str, default=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
 	parser.add_argument("--chat-model", type=str, default=os.getenv("OLLAMA_CHAT_MODEL", "llama3:latest"))
@@ -30,6 +36,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+	"""
+	Main entry point for the networked agent application.
+
+	Raises:
+		OllamaError: If the Ollama server is not reachable or if the specified models are not available.
+	"""    
+    
 	args = build_parser().parse_args()
 
 	llm = OllamaClient(
