@@ -492,19 +492,4 @@ ollama pull nomic-embed-text   # Download embeddings
 
 ## License
 
-MIT License - See LICENSE file for details
-
----
-
-## Citation
-
-If you use The Networked Agent in research, please cite:
-
-```bibtex
-@software{networked_agent_2026,
-  title={The Networked Agent: Graph of Thought + GraphRAG Integration},
-  author={Neill Jean Erasmus},
-  year={2026},
-  url={https://github.com/Neill-Erasmus/the-networked-agent}
-}
-```
+MIT License - See [LICENSE](License) file for details
