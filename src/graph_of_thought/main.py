@@ -7,8 +7,14 @@ from src.ollama_client import OllamaClient, OllamaConfig, OllamaError
 
 from .controller import GoTConfig, GraphOfThoughtController
 
-
 def build_parser() -> argparse.ArgumentParser:
+	"""
+	Builds the argument parser for the Graph of Thought application.
+
+	Returns:
+		argparse.ArgumentParser: The argument parser
+	"""    
+    
 	parser = argparse.ArgumentParser(description="Run Graph of Thought reasoning over a task.")
 	parser.add_argument("--task", type=str, default="", help="Task/question to solve")
 	parser.add_argument("--context", type=str, default="", help="Optional retrieval context")
@@ -22,8 +28,14 @@ def build_parser() -> argparse.ArgumentParser:
 	parser.add_argument("--temperature", type=float, default=0.2)
 	return parser
 
-
 def main() -> None:
+	"""
+	Main entry point for the Graph of Thought application.	
+
+	Raises:
+		OllamaError: If the Ollama server is not reachable or the specified model is not available.
+	"""    
+    
 	args = build_parser().parse_args()
 
 	task = args.task.strip() or input("Task: ").strip()
@@ -61,7 +73,6 @@ def main() -> None:
 	print("\n--- Reasoning Path ---")
 	for idx, step in enumerate(result.reasoning_path, start=1):
 		print(f"{idx}. {step}")
-
 
 if __name__ == "__main__":
 	main()

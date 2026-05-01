@@ -6,19 +6,48 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Callable, Optional
 
-
 @dataclass
 class Relationship:
-    """Entity-entity relationship extracted from text."""
+    """
+    Entity-entity relationship extracted from text.
+
+    Represents semantic connections in the knowledge graph, extracted via pattern
+    matching or NLP. Used for graph-based retrieval expansion.
+
+    Attributes:
+        source_entity (str): The source entity name.
+        target_entity (str): The target entity name.
+        relation_type (str): Type of relationship (e.g., "produces", "has", "is_type_of").
+        chunk_id (str): ID of the chunk where this relationship was extracted.
+        confidence (float): Confidence score [0-1]. Defaults to 0.5.
+    """
+    
     source_entity: str
     target_entity: str
-    relation_type: str  # e.g., "produces", "has", "is_type_of"
+    relation_type: str
     chunk_id: str
     confidence: float = 0.5
 
 
 @dataclass
 class Chunk:
+    """
+    A text chunk with embeddings and metadata.
+
+    Represents a unit of ingested text with semantic embeddings and extracted
+    entities and relationships for graph traversal.
+
+    Attributes:
+        chunk_id (str): Unique identifier (e.g., "doc_1_c3").
+        doc_id (str): Parent document ID.
+        index (int): Position in the document.
+        source (str): Source document name.
+        text (str): The actual chunk text.
+        embedding (list[float]): Semantic embedding vector.
+        entities (list[str]): Extracted entity names.
+        relationships (list[Relationship]): Extracted entity relationships.
+    """
+    
     chunk_id: str
     doc_id: str
     index: int
@@ -28,17 +57,39 @@ class Chunk:
     entities: list[str] = field(default_factory=list)
     relationships: list[Relationship] = field(default_factory=list)
 
-
 @dataclass
 class Document:
+    """
+    A document ingested into the knowledge graph.
+
+    Attributes:
+        doc_id (str): Unique document identifier.
+        source (str): Source location/name.
+        text (str): Full document text.
+        chunk_ids (list[str]): IDs of chunks this document was split into.
+    """
+    
     doc_id: str
     source: str
     text: str
     chunk_ids: list[str]
 
-
 class GraphRAGStore:
-    """Lightweight knowledge graph + vector store hybrid."""
+    """
+    Lightweight hybrid knowledge graph + vector store.
+
+    In-memory storage for documents, chunks, embeddings, entities, and relationships.
+    Supports serialization to JSON and provides indexing for fast retrieval.
+
+    This is the central data structure for GraphRAG knowledge management.
+
+    Attributes:
+        documents (dict[str, Document]): Ingested documents by doc_id.
+        chunks (dict[str, Chunk]): Text chunks with embeddings.
+        chunk_neighbors (dict[str, set[str]]): Graph adjacency for chunks.
+        entity_index (dict[str, set[str]]): Entity -> chunk_ids reverse index.
+        relationships (list[Relationship]): Extracted entity relationships.
+    """
 
     def __init__(self) -> None:
         self.documents: dict[str, Document] = {}
@@ -49,6 +100,20 @@ class GraphRAGStore:
 
     @staticmethod
     def _chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
+        """
+        Split text into overlapping chunks.
+
+        Uses a sliding window approach to maintain context between chunks.
+
+        Args:
+            text (str): Text to chunk.
+            chunk_size (int): Target number of words per chunk.
+            overlap (int): Number of words to overlap between adjacent chunks.
+
+        Returns:
+            list[str]: List of chunk strings.
+        """
+        
         words = text.split()
         if not words:
             return []
@@ -67,6 +132,19 @@ class GraphRAGStore:
 
     @staticmethod
     def _extract_entities(text: str, max_entities: int = 12) -> list[str]:
+        """
+        Extract entity names from text via pattern matching.
+
+        Identifies proper nouns and long domain terms as entities.
+
+        Args:
+            text (str): Text to extract entities from.
+            max_entities (int, optional): Maximum entities to extract. Defaults to 12.
+
+        Returns:
+            list[str]: List of extracted entity names (lowercase, deduplicated).
+        """
+        
         proper_nouns = re.findall(r"\b[A-Z][a-zA-Z0-9_-]*(?:\s+[A-Z][a-zA-Z0-9_-]*){0,2}\b", text)
         long_terms = re.findall(r"\b[a-z][a-z0-9_-]{6,}\b", text)
 
@@ -85,17 +163,26 @@ class GraphRAGStore:
 
     @staticmethod
     def _extract_relationships(text: str, entities: list[str]) -> list[tuple[str, str, str]]:
-        """Extract entity-entity relationships from text using pattern matching.
-        
-        Returns list of (source_entity, target_entity, relation_type) tuples.
         """
+        Extract entity-entity relationships from text using pattern matching.
+
+        Searches for relationships between extracted entities using predefined
+        semantic patterns (produces, has, is_type_of, affects, inhabits, etc.).
+
+        Args:
+            text (str): Text to extract relationships from.
+            entities (list[str]): Previously extracted entity names.
+
+        Returns:
+            list[tuple[str, str, str]]: List of (source_entity, target_entity, relation_type) tuples.
+        """
+        
         if not entities or len(entities) < 2:
             return []
         
         relationships: list[tuple[str, str, str]] = []
         text_lower = text.lower()
-        
-        # Define relationship patterns (entity1 -> relation -> entity2)
+
         relation_patterns = [
             (r"\b{}\b.*?\b(produces|creates|generates)\b.*?\b{}\b", "produces"),
             (r"\b{}\b.*?\b(has|contains|includes)\b.*?\b{}\b", "has"),
@@ -123,6 +210,14 @@ class GraphRAGStore:
         return relationships
 
     def _connect(self, left_chunk_id: str, right_chunk_id: str) -> None:
+        """
+        Connect two chunks as neighbors in the graph.
+
+        Args:
+            left_chunk_id (str): First chunk ID.
+            right_chunk_id (str): Second chunk ID.
+        """
+        
         if left_chunk_id == right_chunk_id:
             return
         self.chunk_neighbors.setdefault(left_chunk_id, set()).add(right_chunk_id)
@@ -136,6 +231,26 @@ class GraphRAGStore:
         chunk_size: int = 140,
         overlap: int = 30,
     ) -> str:
+        """
+        Ingest a document into the knowledge graph.
+
+        Chunks the text, generates embeddings, extracts entities and relationships,
+        and connects chunks in the graph.
+
+        Args:
+            text (str): Document text to ingest.
+            source (str): Source identifier for the document.
+            embed_fn (Callable): Function to generate embeddings for text chunks.
+            chunk_size (int, optional): Words per chunk. Defaults to 140.
+            overlap (int, optional): Word overlap between chunks. Defaults to 30.
+
+        Returns:
+            str: The document ID of the ingested document.
+
+        Raises:
+            ValueError: If text is empty.
+        """
+        
         cleaned = (text or "").strip()
         if not cleaned:
             raise ValueError("Cannot add an empty document to GraphRAGStore")
@@ -154,7 +269,6 @@ class GraphRAGStore:
                 )
             entities = self._extract_entities(chunk_text)
             
-            # Extract relationships between entities in this chunk
             rel_tuples = self._extract_relationships(chunk_text, entities)
             relationships = [
                 Relationship(
@@ -190,7 +304,6 @@ class GraphRAGStore:
                     self._connect(prior_chunk_id, chunk_id)
                 existing.add(chunk_id)
             
-            # Store extracted relationships for global graph traversal.
             for rel in relationships:
                 self.relationships.append(rel)
 
@@ -198,6 +311,13 @@ class GraphRAGStore:
         return doc_id
 
     def to_dict(self) -> dict:
+        """
+        Serialize the store to a dictionary.
+
+        Returns:
+            dict: Dictionary representation with documents, chunks, neighbors, entities, and relationships.
+        """
+        
         return {
             "documents": {doc_id: asdict(doc) for doc_id, doc in self.documents.items()},
             "chunks": {chunk_id: asdict(chunk) for chunk_id, chunk in self.chunks.items()},
@@ -208,6 +328,16 @@ class GraphRAGStore:
 
     @classmethod
     def from_dict(cls, payload: dict) -> GraphRAGStore:
+        """
+        Deserialize a store from a dictionary.
+
+        Args:
+            payload (dict): Dictionary representation (from to_dict()).
+
+        Returns:
+            GraphRAGStore: Reconstructed store instance.
+        """
+        
         store = cls()
         for doc_id, doc_data in payload.get("documents", {}).items():
             store.documents[doc_id] = Document(**doc_data)
@@ -227,6 +357,15 @@ class GraphRAGStore:
         return store
 
     def save_json(self, file_path: str) -> None:
+        """
+        Persist the store to a JSON file.
+
+        Creates parent directories if needed.
+
+        Args:
+            file_path (str): Path to write the store to.
+        """
+        
         folder = os.path.dirname(file_path)
         if folder:
             os.makedirs(folder, exist_ok=True)
@@ -235,6 +374,18 @@ class GraphRAGStore:
 
     @classmethod
     def load_json(cls, file_path: str) -> GraphRAGStore:
+        """
+        Load a store from a JSON file.
+
+        Returns an empty store if the file does not exist.
+
+        Args:
+            file_path (str): Path to the JSON file.
+
+        Returns:
+            GraphRAGStore: Loaded store instance, or empty if file not found.
+        """
+        
         if not os.path.exists(file_path):
             return cls()
         with open(file_path, "r", encoding="utf-8") as infile:

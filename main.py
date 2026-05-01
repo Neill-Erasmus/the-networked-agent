@@ -8,10 +8,17 @@ from src.ollama_client import OllamaClient, OllamaConfig, OllamaError
 
 def build_parser() -> argparse.ArgumentParser:
 	"""
-	Builds the argument parser for the networked agent.
+	Build the argument parser for the Networked Agent CLI.
+
+	Supports:
+	- Ollama configuration (base_url, models)
+	- Knowledge store path
+	- Query or ingestion mode
+	- Interactive mode
+	- GoT and GraphRAG parameter tuning
 
 	Returns:
-		argparse.ArgumentParser: The configured argument parser.
+		argparse.ArgumentParser: Configured parser.
 	"""    
     
 	parser = argparse.ArgumentParser(description="Networked Agent powered by GoT + GraphRAG on local Ollama.")
@@ -37,7 +44,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
 	"""
-	Main entry point for the networked agent application.
+	Main entry point for the Networked Agent application.
+
+	Orchestrates the integrated workflow:
+	1. Initialize and validate Ollama connection
+	2. Create NetworkedAgent with GoT + GraphRAG
+	3. Handle ingestion mode (ingest-file) or query mode (--ask) or interactive mode
+
+	In interactive mode, the agent provides a REPL for ingest and query operations.
 
 	Raises:
 		OllamaError: If the Ollama server is not reachable or if the specified models are not available.

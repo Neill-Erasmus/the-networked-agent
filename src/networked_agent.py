@@ -8,16 +8,40 @@ from src.graph_rag import GraphRAGConfig, GraphRAGEngine
 from src.ollama_client import OllamaClient
 from src.visualization import QueryVisualizer
 
-
 def _env_flag(name: str, default: bool) -> bool:
+    """
+    Convert an environment variable to a boolean flag.
+
+    Args:
+        name (str): Environment variable name.
+        default (bool): Default value if the environment variable is not set.
+
+    Returns:
+        bool: The boolean value of the environment variable or the default.
+    """    
+    
     raw = os.getenv(name)
     if raw is None:
         return default
     return raw.strip().lower() not in {"0", "false", "no", "off"}
 
-
 @dataclass
 class NetworkedAgentConfig:
+    """
+    Configuration for the NetworkedAgent.
+    Attributes:
+        store_path (str): File path for the GraphRAG store JSON.
+        got_max_depth (int): Maximum depth for Graph of Thought reasoning.
+        got_beam_width (int): Beam width for Graph of Thought search.
+        got_branch_factor (int): Branch factor for Graph of Thought expansions.
+        got_temperature (float): Temperature for LLM generation during GoT.
+        rag_top_k (int): Number of top chunks to retrieve for initial context.
+        rag_hops (int): Number of retrieval hops for multi-hop retrieval.
+        save_visualizations (bool): Whether to save visualization artifacts per query.
+        visualization_dir (str): Directory to save visualization files.
+        enable_dynamic_context (bool): Whether to enable dynamic context refinement during GoT reasoning.
+    """    
+    
     store_path: str = os.getenv("GRAPHRAG_STORE_PATH", "data/graphrag_store.json")
     got_max_depth: int = int(os.getenv("GOT_MAX_DEPTH", "3"))
     got_beam_width: int = int(os.getenv("GOT_BEAM_WIDTH", "3"))
@@ -29,28 +53,53 @@ class NetworkedAgentConfig:
     visualization_dir: str = os.getenv("AGENT_VISUALIZATION_DIR", "data/visualizations")
     enable_dynamic_context: bool = _env_flag("AGENT_DYNAMIC_CONTEXT", True)
 
-
 @dataclass
 class EpisodicMemory:
-    """Tracks agent reasoning without contaminating source knowledge."""
+    """
+    Represents a single turn of agent reasoning and response, stored in episodic memory.
+    This is separate from the knowledge base to prevent contamination with synthetic outputs.
+    Attributes:
+        query (str): The user's question or task.
+        answer (str): The agent's response to the query.
+        reasoning_path (list[str]): The sequence of reasoning steps taken to arrive at the answer.
+        retrieved_chunk_ids (list[str]): IDs of knowledge chunks retrieved and used in reasoning.
+        confidence (float): Optional confidence score for the answer (0.0 to 1.0).
+    """    
+    
     query: str
     answer: str
     reasoning_path: list[str]
     retrieved_chunk_ids: list[str]
     confidence: float = 0.5
 
-
 @dataclass
 class AgentTurn:
+    """Represents a single turn of agent reasoning and response.
+    Attributes:
+        question (str): The user's question or task.
+        answer (str): The agent's response to the question.
+        reasoning_path (list[str]): The sequence of reasoning steps taken to arrive at the answer.
+        retrieved_chunk_ids (list[str]): IDs of knowledge chunks retrieved and used in reasoning.
+        visualization_html (str): Optional file path to an HTML visualization of the reasoning process.
+    """
+    
     question: str
     answer: str
     reasoning_path: list[str]
     retrieved_chunk_ids: list[str]
     visualization_html: str = ""
 
-
 class NetworkedAgent:
-    """Agent that reasons with GoT and maintains episodic memory separate from source knowledge."""
+    """
+    A networked agent that integrates Graph of Thought reasoning with GraphRAG retrieval.
+
+    Raises:
+        FileNotFoundError: If an ingested file is not found.
+        ValueError: If an unsupported file type is provided.
+
+    Returns:
+        _type_: AgentTurn containing the question, answer, reasoning path, retrieved chunk IDs, and optional visualization path.
+    """    
 
     ALLOWED_INGEST_EXTENSIONS: tuple[str, ...] = (".txt", ".json")
     INSUFFICIENT_INFO_MESSAGE: str = (
@@ -59,10 +108,18 @@ class NetworkedAgent:
     )
 
     def __init__(self, llm: OllamaClient, config: NetworkedAgentConfig | None = None) -> None:
+        """
+        Initialize the NetworkedAgent with the given LLM client and configuration.
+
+        Args:
+            llm (OllamaClient): An instance of the OllamaClient for LLM interactions.
+            config (NetworkedAgentConfig | None, optional): The configuration for the networked agent. Defaults to None.
+        """        
+        
         self.llm = llm
         self.config = config or NetworkedAgentConfig()
         self.visualizer = QueryVisualizer(base_dir=self.config.visualization_dir)
-        self.episodic_memory: list[EpisodicMemory] = []  # Separate from knowledge base
+        self.episodic_memory: list[EpisodicMemory] = []
         self.got_controller = GraphOfThoughtController(
             llm=self.llm,
             config=GoTConfig(
@@ -82,11 +139,36 @@ class NetworkedAgent:
         )
 
     def ingest_text(self, text: str, source: str = "manual") -> str:
+        """
+        Ingest raw text into the GraphRAG store as a new document.
+
+        Args:
+            text (str): The raw text to ingest.
+            source (str, optional): The source of the text. Defaults to "manual".
+
+        Returns:
+            str: The ID of the ingested document.
+        """        
+        
         doc_id = self.rag_engine.ingest_text(text=text, source=source)
         self.rag_engine.persist()
         return doc_id
 
     def ingest_file(self, file_path: str) -> str:
+        """
+        Ingest a file's content into the GraphRAG store as a new document.
+
+        Args:
+            file_path (str): The path to the file to ingest.
+
+        Raises:
+            FileNotFoundError: If the file is not found.
+            ValueError: If the file type is not supported.
+
+        Returns:
+            str: The ID of the ingested document.
+        """               
+        
         normalized_path = os.path.abspath(file_path)
         if not os.path.isfile(normalized_path):
             raise FileNotFoundError(f"File not found: {normalized_path}")
@@ -104,9 +186,14 @@ class NetworkedAgent:
         return doc_id
 
     def _make_retrieval_callback(self):
-        """Create a callback for dynamic context refinement during GoT reasoning."""
+        """
+        Create a retrieval callback function for dynamic context refinement during GoT reasoning.
+        """
+        
         def refine_context(task: str, _current_context: str, depth: int) -> str:
-            """Request additional context based on reasoning depth."""
+            """
+            Refine the retrieval context based on the current reasoning step.
+            """
             if not self.config.enable_dynamic_context:
                 return _current_context
 
@@ -123,12 +210,16 @@ class NetworkedAgent:
         return refine_context
 
     def think_and_answer(self, question: str) -> AgentTurn:
-        """Reason and answer using GoT with dynamic context refinement.
-        
-        IMPORTANT: Episodic memory (agent reasoning) is stored SEPARATELY from
-        the knowledge base to prevent contamination with synthetic outputs.
         """
-        # Initial retrieval from knowledge base (source documents only)
+        Reason and answer using GoT with dynamic context refinement.
+
+        Args:
+            question (str): The question to answer.
+
+        Returns:
+            AgentTurn: The agent's response.
+        """       
+         
         retrieval = self.rag_engine.retrieve(
             query=question,
             top_k=self.config.rag_top_k,
@@ -153,10 +244,8 @@ class NetworkedAgent:
                 visualization_html="",
             )
         
-        # Create dynamic context refinement callback
         retrieval_callback = self._make_retrieval_callback()
         
-        # Solve with optional context refinement during reasoning
         got_result = self.got_controller.solve(
             task=question,
             context=retrieval.context_text,
@@ -177,7 +266,6 @@ class NetworkedAgent:
             )
             visualization_html = viz_result.html_path
 
-        # Store in episodic memory (NOT in knowledge base) to prevent contamination
         episodic = EpisodicMemory(
             query=question,
             answer=got_result.answer,
@@ -198,6 +286,14 @@ class NetworkedAgent:
         )
 
     def run_interactive(self) -> None:
+        """
+        Run an interactive command-line session with the agent.
+            Commands:
+                /exit - Exit the interactive session.
+                /ask <question> - Ask a question to the agent.
+                /ingest <file_path> - Ingest a file into the knowledge graph (supported types: .txt, .json).
+        """        
+        
         print("Networked agent ready.")
         print("Commands:")
         print("  /exit")
