@@ -7,24 +7,52 @@ from typing import Callable
 
 from .store import GraphRAGStore
 
-
 @dataclass
 class RetrievalHit:
+    """
+    Represents a single retrieved chunk.
+
+    Attributes:
+        chunk_id (str): Identifier of the chunk (e.g., "doc_1_c0").
+        score (float): Relevance score [0-1].
+        source (str): Source document identifier.
+        text (str): The chunk text content.
+        depth (int): Hop distance from initial retrieval.
+    """
+    
     chunk_id: str
     score: float
     source: str
     text: str
     depth: int
-
-
 @dataclass
 class RetrievalResult:
+    """
+    Result of a retrieval query.
+
+    Attributes:
+        query (str): The original query string.
+        hits (list[RetrievalHit]): Retrieved chunks.
+        context_text (str): Formatted context for LLM consumption.
+    """
+    
     query: str
     hits: list[RetrievalHit]
     context_text: str
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
+    """
+    Compute cosine similarity between two embedding vectors.
+
+    Args:
+        left (list[float]): First embedding vector.
+        right (list[float]): Second embedding vector.
+
+    Returns:
+        float: Similarity score in range [0.0, 1.0], or 0.0 if vectors are invalid.
+    """
+    
     if not left or not right or len(left) != len(right):
         return 0.0
     numerator = sum(a * b for a, b in zip(left, right))
@@ -39,15 +67,40 @@ _token_pattern = re.compile(r"[a-zA-Z0-9_]+")
 
 
 def lexical_similarity(query: str, text: str) -> float:
+    """
+    Compute lexical similarity as token overlap Jaccard index.
+
+    Ignores tokens with length <= 2.
+
+    Args:
+        query (str): Query text.
+        text (str): Document text to compare.
+
+    Returns:
+        float: Similarity in range [0.0, 1.0].
+    """
+    
     q_tokens = {token.lower() for token in _token_pattern.findall(query) if len(token) > 2}
     t_tokens = {token.lower() for token in _token_pattern.findall(text) if len(token) > 2}
     if not q_tokens or not t_tokens:
         return 0.0
     return len(q_tokens & t_tokens) / len(q_tokens)
-
-
 class GraphRetriever:
-    """Retrieves top vector chunks and expands via graph neighbors."""
+    """
+    Retrieves relevant chunks via vector similarity and multi-hop graph expansion.
+
+    Combines semantic (vector) and lexical similarity scoring, then expands the
+    initial retrieval results by following graph edges to neighboring chunks.
+    Supports configurable hop distance and neighbor expansion.
+
+    Attributes:
+        store (GraphRAGStore): The knowledge graph and vector store.
+        embed_fn (Callable): Function to generate embeddings.
+
+    Example:
+        retriever = GraphRetriever(store, embed_fn=llm.embed)
+        result = retriever.retrieve("What is Python?", top_k=4, hops=1)
+    """
 
     def __init__(self, store: GraphRAGStore, embed_fn: Callable[[str], list[float]]) -> None:
         self.store = store
@@ -61,6 +114,29 @@ class GraphRetriever:
         neighbors_per_hop: int = 2,
         min_relevance_score: float = 0.18,
     ) -> RetrievalResult:
+        """
+        Retrieve relevant chunks with optional multi-hop graph expansion.
+
+        Process:
+        1. Embed query and compute combined vector+lexical scores for all chunks
+        2. Select top_k seed chunks above min_relevance_score
+        3. Expand via graph neighbors for up to 'hops' iterations
+        4. Return all selected chunks, weighted by hop distance
+
+        Args:
+            query (str): The query string to retrieve for.
+            top_k (int, optional): Number of seed chunks. Defaults to 4.
+            hops (int, optional): Number of expansion hops. Defaults to 1.
+            neighbors_per_hop (int, optional): Neighbors to explore per hop. Defaults to 2.
+            min_relevance_score (float, optional): Score threshold for seed selection. Defaults to 0.18.
+
+        Returns:
+            RetrievalResult: Retrieved chunks with context text formatted for LLM.
+
+        Raises:
+            ValueError: If query embedding fails or chunks lack embeddings.
+        """
+        
         top_k = max(1, int(top_k))
         hops = max(0, int(hops))
         neighbors_per_hop = max(1, int(neighbors_per_hop))
@@ -82,7 +158,7 @@ class GraphRetriever:
             lex_score = lexical_similarity(query, chunk.text)
             base_scores[chunk_id] = (0.8 * vector_score) + (0.2 * lex_score)
 
-        ranked_chunk_ids = sorted(base_scores, key=base_scores.get, reverse=True)
+        ranked_chunk_ids = sorted(base_scores, key=base_scores.get, reverse=True) #type: ignore
         seed_ids = [chunk_id for chunk_id in ranked_chunk_ids if base_scores.get(chunk_id, -1.0) >= min_relevance_score][:top_k]
 
         selected: dict[str, RetrievalHit] = {}
@@ -102,18 +178,14 @@ class GraphRetriever:
                 break
             new_frontier_set: set[str] = set()
             for chunk_id in frontier:
-                # Expand via graph neighbors (sequential + entity-based)
                 neighbors = set(self.store.chunk_neighbors.get(chunk_id, set()))
                 
-                # Also expand via relationships in knowledge graph
                 chunk = self.store.chunks.get(chunk_id)
                 if chunk:
                     for rel in chunk.relationships:
-                        # Find chunks mentioning the target entity
                         related_chunks = self.store.entity_index.get(rel.target_entity, set())
                         neighbors.update(related_chunks)
-                
-                # Rank neighbors by base relevance before pruning expansion width.
+
                 neighbors = list(neighbors)
                 neighbors.sort(key=lambda cid: base_scores.get(cid, -1.0), reverse=True)
                 

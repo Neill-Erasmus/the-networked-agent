@@ -7,8 +7,19 @@ from src.ollama_client import OllamaClient, OllamaConfig, OllamaError
 
 from .engine import GraphRAGConfig, GraphRAGEngine
 
-
 def build_parser() -> argparse.ArgumentParser:
+    """
+    Build the argument parser for the GraphRAG CLI.
+
+    Configurable options:
+    - Ollama connection (base_url, chat_model, embed_model)
+    - Store path for the knowledge graph
+    - Query parameters (top_k, hops)
+
+    Returns:
+        argparse.ArgumentParser: Configured parser.
+    """
+    
     parser = argparse.ArgumentParser(description="Run simple local GraphRAG with Ollama.")
     parser.add_argument("--base-url", type=str, default=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
     parser.add_argument("--chat-model", type=str, default=os.getenv("OLLAMA_CHAT_MODEL", "llama3:latest"))
@@ -19,8 +30,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hops", type=int, default=1)
     return parser
 
-
 def main() -> None:
+    """
+    Main entry point for the GraphRAG CLI.
+
+    Initializes Ollama client, creates GraphRAG engine, and processes queries.
+    If a query is provided via --query, answers it and prints retrieved chunks.
+
+    Raises:
+        OllamaError: If Ollama is not reachable or models are not available.
+    """
+    
     args = build_parser().parse_args()
 
     llm = OllamaClient(
@@ -52,7 +72,6 @@ def main() -> None:
         print("\n=== Retrieved Chunks ===")
         for hit in retrieval.hits:
             print(f"{hit.chunk_id} (score={hit.score:.3f}, source={hit.source}, depth={hit.depth})")
-
 
 if __name__ == "__main__":
     main()
