@@ -9,7 +9,7 @@ A sophisticated AI reasoning framework that combines **Graph of Thought (GoT)** 
 
 ---
 
-## Executive Summary for Recruiters
+## Summary
 
 ### What Problem Does This Solve?
 
